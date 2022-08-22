@@ -1,0 +1,229 @@
+import base64
+from datetime import datetime
+import tkinter as tk
+import pymysql
+from tkcalendar import DateEntry
+import re
+
+
+class Window(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Birthday Wisher")
+        self.configure(width=900, height=600)
+        self.state("zoomed")
+
+        mainMenu = MainMenu(self)
+        mainMenu.pack()
+
+        def toMainMenu():
+            mainMenu.pack()
+            mainMenu.subscribeFrame.pack_forget()
+            mainMenu.unsubscribeFrame.pack_forget()
+
+
+class Subscribe(tk.Frame):
+    def __init__(self, window):
+        tk.Frame.__init__(self, window)
+        self.place(relx=0.5, rely=0.5, anchor="center")
+
+        email = tk.StringVar()
+        firstName = tk.StringVar()
+        lastName = tk.StringVar()
+        birthdate = tk.StringVar()
+
+        def checkEmail(email):
+            regex = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+            return re.fullmatch(regex, email)
+
+        def getInputs():
+            allRequired = True
+
+            emptyEmailWarning.grid_forget()
+            invalidEmailWarning.grid_forget()
+            emptyFirstNameWarning.grid_forget()
+            emptyLastNameWarning.grid_forget()
+            futureDateWarning.grid_forget()
+            invalidDateWarning.grid_forget()
+            successMessage.grid_forget()
+
+            try:
+                dateSplit = birthdate.get().split('/')
+                enteredDateComparator = datetime(int(dateSplit[2]), int(dateSplit[0]), int(dateSplit[1]))
+
+                if enteredDateComparator > datetime.now():
+                    futureDateWarning.grid(row=3, column=2, sticky="w")
+                    allRequired = False
+
+            except (ValueError, IndexError) as e:
+                invalidDateWarning.grid(row=3, column=2, sticky="w")
+                allRequired = False
+
+            if email.get().strip() == "":
+                emptyEmailWarning.grid(row=0, column=2, sticky="w")
+                allRequired = False
+
+            elif not checkEmail(email.get()):
+                invalidEmailWarning.grid(row=0, column=2, sticky="w")
+                allRequired = False
+
+            if firstName.get().strip() == "":
+                emptyFirstNameWarning.grid(row=1, column=2, sticky="w")
+                allRequired = False
+
+            if lastName.get().strip() == "":
+                emptyLastNameWarning.grid(row=2, column=2, sticky="w")
+                allRequired = False
+
+            if allRequired:
+                database_connection = pymysql.connect(host="personal-database.cnsu05odmtyy.us-west-2.rds.amazonaws.com",
+                                                      user="admin",
+                                                      password=base64.b64decode("MDUwMDc4OGZvcmQ=").decode("utf-8"),
+                                                      db="birthday_greeter")
+
+                cursor = database_connection.cursor()
+
+                try:
+                    cursor.execute("CALL addUser('{0}', '{1}', '{2}', '{3}')".format(str(email.get().strip()),
+                                                                                 firstName.get().strip(),
+                                                                                 lastName.get().strip(),
+                                                                                 dateSplit[2] + "-" +
+                                                                                 dateSplit[0] + "-" +
+                                                                                 dateSplit[1]))
+                except pymysql.err.IntegrityError:
+                    pass
+
+                database_connection.commit()
+
+                cursor.close()
+                database_connection.close()
+
+                successMessage.grid(column=1, row=5)
+
+        emailLabel = tk.Label(self, text="E-mail:", justify="left", anchor="w", font=("lucida", 18, "bold"))
+        emailLabel.grid(row=0, column=0, sticky="w", padx=5, pady=5)
+
+        emailTextBox = tk.Entry(self, bd=2, textvariable=email, width=30, font=16)
+        emailTextBox.grid(row=0, column=1, padx=5, pady=5)
+
+        firstNameLabel = tk.Label(self, text="First name:", justify="left", anchor="w", font=("lucida", 18, "bold"))
+        firstNameLabel.grid(row=1, column=0, sticky="w", padx=5, pady=5)
+
+        firstNameTextBox = tk.Entry(self, bd=2, textvariable=firstName, width=30, font=16)
+        firstNameTextBox.grid(row=1, column=1, padx=5, pady=5)
+
+        lastNameLabel = tk.Label(self, text="Last name:", justify="left", anchor="w", font=("lucida", 18, "bold"))
+        lastNameLabel.grid(row=2, column=0, sticky="w", padx=5, pady=5)
+
+        lastNameTextBox = tk.Entry(self, bd=2, textvariable=lastName, width=30, font=16)
+        lastNameTextBox.grid(row=2, column=1, padx=5, pady=5)
+
+        birthdateLabel = tk.Label(self, text="Birthdate:", justify="left", anchor="w", font=("lucida", 18, "bold"))
+        birthdateLabel.grid(row=3, column=0, sticky="w", padx=5, pady=5)
+
+        birthdateCalendar = DateEntry(self, locale="en_US", date_pattern="mm/dd/y", textvariable=birthdate,
+                                      justify="left",
+                                      anchor="w", width=10, font=("lucida", 18, "bold"))
+        birthdateCalendar.grid(row=3, column=1, padx=5, pady=5)
+
+        submitButton = tk.Button(self, text="Submit", command=lambda: getInputs(), font=("lucida", 18, "bold"))
+        submitButton.grid(row=4, column=1, padx=5, pady=5)
+
+        emptyEmailWarning = tk.Label(self, text="*E-mail is a required field*", fg="red", justify="left", anchor="w",
+                                     font=16)
+        invalidEmailWarning = tk.Label(self, text="*E-mail is not valid*", fg="red", justify="left", anchor="w",
+                                       font=16)
+        emptyFirstNameWarning = tk.Label(self, text="*First name is a required field*", fg="red", justify="left",
+                                         anchor="w", font=16)
+        emptyLastNameWarning = tk.Label(self, text="*Last name is a required field*", fg="red", justify="left",
+                                        anchor="w", font=16)
+        futureDateWarning = tk.Label(self, text="*Entered date cannot be a future date*", fg="red", justify="left",
+                                     anchor="w", font=16)
+        invalidDateWarning = tk.Label(self, text="*Format mm/dd/yyyy*", fg="red", justify="left", anchor="w", font=16)
+
+        successMessage = tk.Label(self, text="SUCCESSFULLY ADDED!", fg="green", font=16)
+
+class Unsubscribe(tk.Frame):
+    def __init__(self, window):
+        tk.Frame.__init__(self, window)
+        self.place(relx=0.5, rely=0.5, anchor="center")
+
+        def checkEmail(email):
+            regex = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+            return re.fullmatch(regex, email)
+
+        email = tk.StringVar()
+
+        def getInputs():
+            emptyEmailWarning.grid_forget()
+            invalidEmailWarning.grid_forget()
+
+            if email.get().strip() == "":
+                emptyEmailWarning.grid(row=0, column=2, sticky="w")
+
+            elif not checkEmail(email.get()):
+                invalidEmailWarning.grid(row=0, column=2, sticky="w")
+
+            else:
+                database_connection = pymysql.connect(host="REDACTED",
+                                                      user="REDACTED",
+                                                      password="REDACTED",
+                                                      db="REDACTED")
+
+                cursor = database_connection.cursor()
+
+                cursor.execute("DELETE FROM Users WHERE email = '{}'".format(email.get().strip()))
+
+                database_connection.commit()
+
+                cursor.close()
+                database_connection.close()
+
+        emailLabel = tk.Label(self, text="E-mail:", justify="left", anchor="w", font=("lucida", 18, "bold"))
+        emailLabel.grid(row=0, column=0, sticky="w", padx=5, pady=5)
+
+        emailTextBox = tk.Entry(self, bd=2, textvariable=email, width=30, font=16)
+        emailTextBox.grid(row=0, column=1, padx=5, pady=5)
+
+        unsubscribeButton = tk.Button(self, text="Unsubscribe", command=lambda: getInputs(), font=("lucida", 18, "bold"))
+        unsubscribeButton.grid(row=4, column=1, padx=5, pady=5)
+
+        emptyEmailWarning = tk.Label(self, text="*E-mail is a required field*", fg="red", justify="left", anchor="w",
+                                     font=16)
+        invalidEmailWarning = tk.Label(self, text="*E-mail is not valid*", fg="red", justify="left", anchor="w",
+                                       font=16)
+
+
+class MainMenu(tk.Frame):
+    def __init__(self, window):
+        tk.Frame.__init__(self, window)
+        self.place(relx=0.5, rely=0.5, anchor="center")
+
+        subscribeFrame = Subscribe(window)
+        subscribeFrame.pack()
+        subscribeFrame.pack_forget()
+
+        unsubscribeFrame = Unsubscribe(window)
+        unsubscribeFrame.pack()
+        unsubscribeFrame.pack_forget()
+
+        def switchToSubscribe():
+            subscribeFrame.pack()
+            self.pack_forget()
+
+        def switchToUnsubscribe():
+            unsubscribeFrame.pack()
+            self.pack_forget()
+
+        subscribePageButton = tk.Button(self, text="Subscribe", command=lambda: switchToSubscribe(), font=("lucida", 18, "bold"))
+        subscribePageButton.grid(column=0, row=0)
+        unsubscribePageButton = tk.Button(self, text="Unsubscribe", command=lambda: switchToUnsubscribe(), font=("lucida", 18, "bold"))
+        unsubscribePageButton.grid(column=1, row=0)
+
+
+
+
+
+window = Window()
+
+window.mainloop()
